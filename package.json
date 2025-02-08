@@ -1,0 +1,24 @@
+{
+  "name": "djs-menu-addon-test",
+  "version": "1.0.0",
+  "private": true,
+  "description": "TEsting",
+  "main": "./dist/index.js",
+  "type": "module",
+  "scripts": {
+    "build": "tsc",
+    "build:dev": "tsc && npm run dev",
+    "deploy:dev": "tsc && node ./dist/index.js --use-deploy",
+    "dev": "node ./dist/index.js",
+    "local-deploy": "tsc && node -r dotenv/config dist/utils/deploy.js"
+  },
+  "author": "Th3Ward3n",
+  "license": "ISC",
+  "dependencies": {
+    "@th3ward3n/djs-menu": "file:../../bundle",
+    "@types/node": "^22.13.1",
+    "discord.js": "^14.17.3",
+    "dotenv": "^16.4.7",
+    "typescript": "^5.7.3"
+  }
+}

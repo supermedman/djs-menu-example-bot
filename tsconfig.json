@@ -1,0 +1,42 @@
+{
+    "compilerOptions": {
+        // Type Checking
+        "exactOptionalPropertyTypes": true,
+        "noFallthroughCasesInSwitch": true,
+        "noImplicitOverride": true,
+        "noImplicitReturns": true,
+        "noImplicitAny": true,
+        "noUnusedLocals": true,
+        "noUnusedParameters": true,
+        "strict": true,
+        // Modules
+        "allowArbitraryExtensions": false,
+        "allowImportingTsExtensions": false,
+        "module": "ES2022",
+        "moduleResolution": "node10",
+        // Emit
+        "declaration": true,
+        "declarationMap": false,
+        "importHelpers": false,
+        "noEmitHelpers": true,
+        "outDir": "dist",
+        "rootDir": "src",
+        "removeComments": false,
+        "sourceMap": true,
+        // Interop Constraints
+        "allowSyntheticDefaultImports": true,
+        "esModuleInterop": true,
+        "forceConsistentCasingInFileNames": true,
+        "isolatedModules": true,
+        // Lang and Env
+        "lib": [
+            "ESNext",
+        ],
+        "skipLibCheck": true,
+        "target": "ES2022",
+        "useDefineForClassFields": true
+    },
+    "include": [
+        "src/**/*.ts"
+    ]
+}
