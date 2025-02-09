@@ -21,6 +21,7 @@ import {
 } from "discord.js";
 import ExtendedClient from "../../classes/client";
 import { ChatInputCommand } from "../../interfaces";
+import { incRandNum } from "../../utils/index.js";
 
 interface TestArguments {
     txt: {
@@ -65,6 +66,9 @@ async function execute(_: ExtendedClient, interaction: ChatInputCommandInteracti
             break;
         case "basic menu":
             callableTest = basicMenuTest;
+            break;
+        case "paging menu":
+            callableTest = pagingMenuTest;
             break;
         default:
             return await interaction.reply({
@@ -230,6 +234,106 @@ async function basicMenuTest(i: ChatInputCommandInteraction, args: TestArguments
                 case "NEXT":
                     // Move forward one context frame
                     await menu.frameForward(exampleFrameData[menu.position]);
+                    break;
+                case "BACK":
+                case "CANCEL":
+                    // Move backwards one context frame
+                    await menu.frameBackward();
+                    break;
+                case "UNKNOWN":
+                    // Unknown action, refresh current frame!
+                    await menu.frameRefresh();
+                    break;
+            }
+
+            // await c.followUp({
+            //     content: `Collected Button: ${c.customId}`,
+            //     flags: MessageFlags.Ephemeral
+            // });
+
+        }).catch(console.error);
+    });
+
+    menu.buttons?.on('end', (_, r) => {
+        if (!r || r === 'time') menu.destroy();
+    });
+}
+
+
+async function pagingMenuTest(i: ChatInputCommandInteraction, args: TestArguments) {
+    const sharedBackRow = spawnBackButtonRow();
+
+    const frameSize = (!args.int.one)
+        ? 5 : Math.max(25, args.int.one);
+    const pageSize = (!args.int.two)
+        ? 5 : Math.max(25, args.int.two);
+
+    const exampleFrameData: MenuDataContentBase[] = Array(frameSize).fill(0)
+        .map<MenuDataContentBase>(
+            (_, idx) => ({
+                embeds: [
+                    new EmbedBuilder({
+                        title: `Frame #${idx + 1}`,
+                        description: "This is a frame in a menu, it is one of many!"
+                    }),
+                ],
+                components: (idx === frameSize - 1) ? [sharedBackRow] : [
+                    new ActionRowBuilder<ButtonBuilder>()
+                        .addComponents(
+                            new ButtonBuilder({
+                                custom_id: `frame-${idx}-main`,
+                                style: ButtonStyle.Primary,
+                                label: "Do something!"
+                            }),
+                            new ButtonBuilder({
+                                custom_id: `frame-${idx}-alt`,
+                                style: ButtonStyle.Secondary,
+                                label: "Do Something else!"
+                            })
+                        ).toJSON(),
+                    sharedBackRow
+                ],
+            }),
+        );
+
+    const randomPagerFrame = incRandNum(0, frameSize - 1);
+
+    const examplePageData: PagerDataOptionBase = {
+        embeds: Array(pageSize).fill(0).map<EmbedBuilder>(
+            (_, idx) =>
+                new EmbedBuilder({
+                    title: `Frame #${randomPagerFrame + 2}/Page #${idx + 1}`,
+                    description: "This is a page, it is one of many"
+                }),
+        ),
+    };
+
+    const exampleMenuOptions: MenuManagerOptionBase = {
+        contents: exampleFrameData[0],
+        sendAs: "Reply",
+        timeLimit: 300_000
+    };
+
+    const menu = await MenuManager.createAnchor(i, exampleMenuOptions);
+
+    // Initilizing a new internal Paginator (Omitting `id`)
+    menu.spawnPageContainer(examplePageData);
+
+    menu.buttons?.on('collect', (c) => {
+        c.deferUpdate().then(async () => {
+
+            switch (menu.analyzeAction(c.customId)) {
+                case "PAGE":
+                    // Move forward one context page on the current frame
+                    await menu.framePageChange(c.customId);
+                    break;
+                case "NEXT":
+                    // Check if page injection should occur
+                    if (menu.position - 1 === randomPagerFrame) {
+                        // As the `id` was omitted during paginator creation, `usePager` can be set as a boolean
+                        await menu.frameForward(exampleFrameData[menu.position], { usePager: true });
+                        // Move forward one context frame
+                    } else await menu.frameForward(exampleFrameData[menu.position]);
                     break;
                 case "BACK":
                 case "CANCEL":
