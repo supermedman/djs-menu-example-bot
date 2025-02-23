@@ -34,9 +34,10 @@ interface TestArguments {
         two: number;
         three: number;
     };
+    client: ExtendedClient;
 }
 
-async function execute(_: ExtendedClient, interaction: ChatInputCommandInteraction) {
+async function execute(client: ExtendedClient, interaction: ChatInputCommandInteraction) {
     const testName = interaction.options.getString('sandbox_context', true);
     const collectedArgs: TestArguments = {
         txt: {
@@ -48,7 +49,8 @@ async function execute(_: ExtendedClient, interaction: ChatInputCommandInteracti
             one: interaction.options.getInteger('number_arg_one') ?? 0,
             two: interaction.options.getInteger('number_arg_two') ?? 0,
             three: interaction.options.getInteger('number_arg_three') ?? 0
-        }
+        },
+        client
     };
 
     type CallableContextTest = (
@@ -69,6 +71,9 @@ async function execute(_: ExtendedClient, interaction: ChatInputCommandInteracti
             break;
         case "paging menu":
             callableTest = pagingMenuTest;
+            break;
+        case "help menu":
+            callableTest = advancedPagingMenuTest;
             break;
         default:
             return await interaction.reply({
@@ -330,8 +335,10 @@ async function pagingMenuTest(i: ChatInputCommandInteraction, args: TestArgument
                 case "NEXT":
                     // Check if page injection should occur
                     if (menu.position - 1 === randomPagerFrame) {
-                        // As the `id` was omitted during paginator creation, `usePager` can be set as a boolean
+                        // As the `id` was omitted during paginator creation, `usePager` should be set to true.
+                        // You can also set `usePager: '0'` however this is NOT SUGGESTED
                         await menu.frameForward(exampleFrameData[menu.position], { usePager: true });
+
                         // Move forward one context frame
                     } else await menu.frameForward(exampleFrameData[menu.position]);
                     break;
@@ -359,6 +366,156 @@ async function pagingMenuTest(i: ChatInputCommandInteraction, args: TestArgument
     });
 }
 
+
+async function advancedPagingMenuTest(i: ChatInputCommandInteraction, _: TestArguments) {
+    const sharedBackRow = spawnBackButtonRow();
+
+    /**
+     * Main Menu (Frame 0 / Initial Message)
+     */
+    const exampleMainMenuDisplay = new EmbedBuilder({
+        title: "== Select a Help Catagory ==",
+        description: "> `Fun`\n> `Utility`\n> `Other`"
+    });
+    const exampleMainMenuControls = new ActionRowBuilder<ButtonBuilder>().addComponents(
+        new ButtonBuilder({
+            custom_id: "fun",
+            style: ButtonStyle.Secondary,
+            label: "Fun Commands"
+        }),
+        new ButtonBuilder({
+            custom_id: "utility",
+            style: ButtonStyle.Secondary,
+            label: "Utility Commands"
+        }),
+        new ButtonBuilder({
+            custom_id: "other",
+            style: ButtonStyle.Secondary,
+            label: "Other Commands"
+        }),
+    ).toJSON();
+
+
+    /**
+     * Injected Placeholder Frame
+     * 
+     * This method of using placeholders is not desired, it is however currently required.
+     * Work is being done to solve this concept in the base @th3ward3n/djs-menu package
+     */
+    const exampleEmptyDisplay = new EmbedBuilder({
+        title: "== This will never be seen =="
+    });
+
+    /**
+     * Sub Menus (Frame 1 / Injected Per Selected Catagory)
+     */
+    const exampleCommandNames = {
+        fun: ["cute-animal", "meme", "urban-dictonary"],
+        utility: ["command-use-stats", "help", "profile"],
+        other: ["ping", "info"]
+    };
+
+    const loadHelpCommandPages = (names: string[]) => {
+        return {
+            embeds: Array(names.length).fill(0).map<EmbedBuilder>(
+                (_, idx) =>
+                    new EmbedBuilder({
+                        title: `= How to use ${names[idx]} =`,
+                        description: "This is an example help page for a command!"
+                    }),
+            ),
+        };
+    };
+
+    const exampleFunCommandPages = loadHelpCommandPages(exampleCommandNames.fun);
+    const exampleUtilityCommandPages = loadHelpCommandPages(exampleCommandNames.utility);
+    const exampleOtherCommandPages = loadHelpCommandPages(exampleCommandNames.other);
+
+    // interface ExtendedMenuFrameContainer {
+    //     [subFrame: string]: MenuDataContentBase;
+    // }
+
+    const exampleFrameData: MenuDataContentBase[] = [
+        {
+            embeds: [exampleMainMenuDisplay],
+            components: [exampleMainMenuControls]
+        },
+        {
+            embeds: [exampleEmptyDisplay],
+            components: [sharedBackRow]
+        }
+    ];
+
+    const exampleMenuOptions: MenuManagerOptionBase = {
+        contents: exampleFrameData[0],
+        sendAs: "Reply",
+        timeLimit: 300_000
+    };
+
+    const menu = await MenuManager.createAnchor(i, exampleMenuOptions);
+
+    // Attach internal Paginators using unique ids
+    /**
+     * @note Given `id`s should be able to exactly match a button/stringSelect `custom_id`
+     * @example
+     * ```ts
+     * menu.spawnPageContainer(pageData, "uniqueid");
+     * 
+     * // INCORRECT 
+     * const WRONG_ExampleButton = new ButtonBuilder()
+     *      .setCustomId("action-something-uniqueid");
+     * const WRONG_ExampleButtonTwo = new ButtonBuilder()
+     *      .setCustomId("action-uniqueid-something");
+     * 
+     * // CORRECT!!
+     * const CORRECT_ExampleButton = new ButtonBuilder()
+     *      .setCustomId("uniqueid-action-something");
+     * ```
+     */
+    menu.spawnPageContainer(exampleFunCommandPages, "fun");
+    menu.spawnPageContainer(exampleUtilityCommandPages, "utility");
+    menu.spawnPageContainer(exampleOtherCommandPages, "other");
+
+    menu.buttons?.on('collect', (c) => {
+        c.deferUpdate().then(async () => {
+
+            switch (menu.analyzeAction(c.customId)) {
+                case "PAGE":
+                    // Handle paging internally
+                    await menu.framePageChange(c.customId);
+                    break;
+                case "NEXT":
+                    // In this example, any button pressed on the first frame will require a paginator injection
+                    // Here we are loading the placeholder frame embeds, and specifing the paging `id` to inject with
+                    // Refer to the example shown above the paginator attachment step.
+                    if (menu.position === 1) {
+                        await menu.frameForward(
+                            exampleFrameData[menu.position],
+                            { usePager: c.customId.split('-')[0] }
+                        );
+                    }
+                    break;
+                case "BACK":
+                case "CANCEL":
+                    await menu.frameBackward();
+                    break;
+                case "UNKNOWN":
+                    await menu.frameRefresh();
+                    break;
+            }
+
+            await c.followUp({
+                content: `Collected Button: ${c.customId}`,
+                flags: MessageFlags.Ephemeral
+            });
+
+        }).catch(console.error);
+    });
+
+    menu.buttons?.on('end', (_, r) => {
+        if (!r || r === 'time') menu.destroy();
+    });
+}
 
 //#endregion
 
